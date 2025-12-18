@@ -110,6 +110,7 @@ class ProductServiceTest {
     }
 
     // TODO: 테스트를 완성하세요
+    // 완성이 되어있는 것 같아요.
     @Test
     void findProductsByCategory() {
         when(productRepository.findByCategory("Electronics")).thenReturn(List.of(product1));

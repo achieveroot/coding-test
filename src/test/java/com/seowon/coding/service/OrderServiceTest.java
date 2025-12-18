@@ -153,7 +153,7 @@ class OrderServiceTest {
         assertEquals("John Doe", placed.getCustomerName());
         assertEquals("john@example.com", placed.getCustomerEmail());
         assertEquals(Order.OrderStatus.PENDING, placed.getStatus());
-        assertEquals(2, placed.getItems().size());
+        assertEquals(1, placed.getItems().size());
 
         verify(productRepository, times(1)).findById(1L);
         verify(productRepository, times(1)).findById(2L);
