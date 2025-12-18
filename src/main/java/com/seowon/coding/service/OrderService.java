@@ -111,6 +111,8 @@ public class OrderService {
                                   List<Integer> quantities,
                                   String couponCode) {
         // 의도적으로 Service 에 도메인 로직을 몰아넣은 구현 (리팩토링 대상)
+        // Order를 생성할 때 빌더를 사용하지 않고 내부에 정적 팩토리 메서드를 만들고 Objects.requireNonNull을 사용할것 같습니다.
+        // customerName, customerEmail을 체크합니다.
         if (customerName == null || customerEmail == null) {
             throw new IllegalArgumentException("customer info required");
         }
@@ -157,6 +159,9 @@ public class OrderService {
         }
 
         // 배송비/할인 규칙(리팩토링 대상)
+        // 배송비, 할인 도메인 서비스를 만들어 오더에 주입해주는 방식으로 리팩토링 할 것 같습니다.
+        // 예를 들어 Order에 shipping(BigDecimal subtotal, ShippingService shippingService) 등으로 도메인 서비스를 주입해주어 해결하겠습니다.
+
         BigDecimal shipping = subtotal.compareTo(new BigDecimal("100.00")) >= 0 ? BigDecimal.ZERO : new BigDecimal("5.00");
         BigDecimal discount = (couponCode != null && couponCode.startsWith("SALE")) ? new BigDecimal("10.00") : BigDecimal.ZERO;
 
