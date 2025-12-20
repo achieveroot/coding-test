@@ -1,5 +1,6 @@
 package com.seowon.coding.controller;
 
+import com.seowon.coding.controller.dto.CreateOrderProductRequest;
 import com.seowon.coding.controller.dto.CreateOrderRequest;
 import com.seowon.coding.domain.model.Order;
 import com.seowon.coding.service.OrderService;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -69,15 +71,21 @@ public class OrderController {
      *   ]
      * }
      */
+    @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody CreateOrderRequest request) {
-        List<Long> productIds = request.getProducts()
-                .stream()
-                .map(product -> product.getFirst()).toList();
+        List<CreateOrderProductRequest> products = request.getProducts();
+        List<Long> productIds = new ArrayList<>();
+        List<Integer> quantities = new ArrayList<>();
 
-        List<Integer> quantities = request.getProducts()
-                .stream()
-                .map(product -> product.getSecond()).toList();
+        for (CreateOrderProductRequest product : products) {
+            productIds.add(product.getProductId());
+            quantities.add(product.getQuantity());
+        }
 
-        return ResponseEntity.created(URI.create("api/orders")).body(orderService.placeOrder(request.getCustomerName(), request.getCustomerEmail(), productIds, quantities));
+        Order order = orderService.placeOrder(request.getCustomerName(), request.getCustomerEmail(), productIds, quantities);
+
+        return ResponseEntity
+                .created(URI.create("/api/orders/" + order.getId()))
+                .body(order);
     }
 }
