@@ -18,7 +18,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -72,29 +74,29 @@ public class OrderService {
                 .orderDate(LocalDateTime.now())
                 .build();
 
-        List<Pair<Long, Integer>> zip = ListFun.zip(productIds, quantities);
+        List<Product> products = productRepository.findAllById(productIds);
+        Map<Long, Product> productMap = products.stream()
+                .collect(Collectors.toMap(product -> product.getId(), product -> product));
 
-        List<OrderItem> orderItems = zip.stream()
-                .map(z -> {
-                    Long productId = z.getFirst();
-                    Integer quantity = z.getSecond();
+        for (int index = 0; index < productIds.size(); index++) {
+            Long productId = productIds.get(index);
+            Integer quantity = quantities.get(index);
 
-                    Product product = productRepository.findById(productId).orElseThrow(() -> new IllegalArgumentException());
+            Product product = productMap.get(productId);
+            if (product == null) {
+                throw new IllegalArgumentException("Product Not Found: " + productId);
+            }
 
-                    if (product.isInStock()) {
-                        product.decreaseStock(quantity);
-                    }
+            product.decreaseStock(quantity);
 
-                    OrderItem orderItem = OrderItem.builder()
-                            .product(product)
-                            .quantity(quantity)
-                            .price(product.getPrice())
-                            .build();
+            OrderItem orderItem = OrderItem.builder()
+                    .product(product)
+                    .quantity(quantity)
+                    .price(product.getPrice())
+                    .build();
 
-                    return orderItem;
-                }).toList();
-
-        orderItems.forEach(orderItem -> order.addItem(orderItem));
+            order.addItem(orderItem);
+        }
 
         return orderRepository.save(order);
     }
