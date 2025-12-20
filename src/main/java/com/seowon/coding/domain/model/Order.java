@@ -1,10 +1,7 @@
 package com.seowon.coding.domain.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,7 +12,7 @@ import java.util.List;
 @Table(name = "orders") // "order" is a reserved keyword in SQL
 @Data
 @Builder
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 public class Order {
     
@@ -35,9 +32,23 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
-    
+
     private BigDecimal totalAmount;
-    
+
+    public static Order create(String customerName, String customerEmail, LocalDateTime orderDate) {
+        if (customerName == null || customerEmail == null) {
+            throw new IllegalArgumentException("customer info required");
+        }
+
+        return Order.builder()
+                .customerName(customerName)
+                .customerEmail(customerEmail)
+                .status(OrderStatus.PENDING)
+                .orderDate(orderDate)
+                .totalAmount(BigDecimal.ZERO)
+                .build();
+    }
+
     // Business logic
     public void addItem(OrderItem item) {
         items.add(item);
@@ -56,6 +67,13 @@ public class Order {
                 .map(OrderItem::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
+
+    public void recalculateTotalAmount(ShippingPolicy shippingPolicy, DiscountPolicy discountPolicy, String couponCode) {
+        BigDecimal shipping = shippingPolicy.calculateShipping(this);
+        BigDecimal discount = discountPolicy.calculateDiscount(couponCode);
+
+        this.totalAmount = this.totalAmount.add(shipping).subtract(discount);
+    }
     
     public void markAsProcessing() {
         this.status = OrderStatus.PROCESSING;
@@ -72,7 +90,7 @@ public class Order {
     public void markAsCancelled() {
         this.status = OrderStatus.CANCELLED;
     }
-    
+
     public enum OrderStatus {
         PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
     }

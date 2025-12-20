@@ -7,16 +7,15 @@ import com.seowon.coding.domain.model.Product;
 import com.seowon.coding.domain.repository.OrderRepository;
 import com.seowon.coding.domain.repository.ProcessingStatusRepository;
 import com.seowon.coding.domain.repository.ProductRepository;
-import com.seowon.coding.util.ListFun;
+import com.seowon.coding.domain.model.DiscountPolicy;
+import com.seowon.coding.domain.model.ShippingPolicy;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +29,8 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final ProcessingStatusRepository processingStatusRepository;
+    private final ShippingPolicy shippingPolicy;
+    private final DiscountPolicy discountPolicy;
 
     @Transactional(readOnly = true)
     public List<Order> getAllOrders() {
@@ -113,25 +114,9 @@ public class OrderService {
                                   List<Integer> quantities,
                                   String couponCode) {
         // 의도적으로 Service 에 도메인 로직을 몰아넣은 구현 (리팩토링 대상)
-        // Order를 생성할 때 빌더를 사용하지 않고 내부에 정적 팩토리 메서드를 만들고 Objects.requireNonNull을 사용할것 같습니다.
-        // customerName, customerEmail을 체크합니다.
-        if (customerName == null || customerEmail == null) {
-            throw new IllegalArgumentException("customer info required");
-        }
-        if (productIds == null || quantities == null || productIds.size() != quantities.size()) {
-            throw new IllegalArgumentException("products/quantities invalid");
-        }
+        invalidCheck(productIds, quantities);
+        Order order = Order.create(customerName, customerEmail, LocalDateTime.now());
 
-        Order order = Order.builder()
-                .customerName(customerName)
-                .customerEmail(customerEmail)
-                .status(Order.OrderStatus.PENDING)
-                .orderDate(LocalDateTime.now())
-                .items(new ArrayList<>())
-                .totalAmount(BigDecimal.ZERO)
-                .build();
-
-        BigDecimal subtotal = BigDecimal.ZERO;
         for (int i = 0; i < productIds.size(); i++) {
             Long pid = productIds.get(i);
             int qty = quantities.get(i);
@@ -139,37 +124,34 @@ public class OrderService {
             // 의도: 중간 Repository 조회로 설계 고민 유도
             Product product = productRepository.findById(pid)
                     .orElseThrow(() -> new IllegalArgumentException("Product not found: " + pid));
-            if (qty <= 0) {
-                throw new IllegalArgumentException("quantity must be positive: " + qty);
-            }
-            if (product.getStockQuantity() < qty) {
-                throw new IllegalStateException("insufficient stock for product " + pid);
-            }
-
-            OrderItem item = OrderItem.builder()
-                    .order(order)
-                    .product(product)
-                    .quantity(qty)
-                    .price(product.getPrice()) // 가격 스냅샷
-                    .build();
-            order.getItems().add(item);
 
             // 재고 차감(리팩토링 대상)
             product.decreaseStock(qty);
 
-            subtotal = subtotal.add(product.getPrice().multiply(BigDecimal.valueOf(qty)));
+            OrderItem item = OrderItem.builder()
+                    .product(product)
+                    .quantity(qty)
+                    .price(product.getPrice()) // 가격 스냅샷
+                    .build();
+            order.addItem(item);
         }
 
         // 배송비/할인 규칙(리팩토링 대상)
-        // 배송비, 할인 도메인 서비스를 만들어 오더에 주입해주는 방식으로 리팩토링 할 것 같습니다.
-        // 예를 들어 Order에 shipping(BigDecimal subtotal, ShippingService shippingService) 등으로 도메인 서비스를 주입해주어 해결하겠습니다.
+        order.recalculateTotalAmount(shippingPolicy, discountPolicy, couponCode);
+        order.markAsProcessing();
 
-        BigDecimal shipping = subtotal.compareTo(new BigDecimal("100.00")) >= 0 ? BigDecimal.ZERO : new BigDecimal("5.00");
-        BigDecimal discount = (couponCode != null && couponCode.startsWith("SALE")) ? new BigDecimal("10.00") : BigDecimal.ZERO;
-
-        order.setTotalAmount(subtotal.add(shipping).subtract(discount));
-        order.setStatus(Order.OrderStatus.PROCESSING);
         return orderRepository.save(order);
+    }
+
+    private void invalidCheck(List<Long> productIds, List<Integer> quantities) {
+        if (productIds == null || quantities == null || productIds.size() != quantities.size()) {
+            throw new IllegalArgumentException("products/quantities invalid");
+        }
+        for (Integer quantity : quantities) {
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("quantity must be positive: " + quantity);
+            }
+        }
     }
 
     /**
