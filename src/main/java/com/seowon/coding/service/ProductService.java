@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,24 +14,25 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Transactional
 public class ProductService {
-    
+    private static final BigDecimal VAT = new BigDecimal("1.10");
+
     private final ProductRepository productRepository;
-    private final BigDecimal VAT = BigDecimal.valueOf(1.1);
-    
+
+
     @Transactional(readOnly = true)
     public List<Product> getAllProducts() {
         return productRepository.findAll();
     }
-    
+
     @Transactional(readOnly = true)
     public Optional<Product> getProductById(Long id) {
         return productRepository.findById(id);
     }
-    
+
     public Product createProduct(Product product) {
         return productRepository.save(product);
     }
-    
+
     public Product updateProduct(Long id, Product product) {
         if (!productRepository.existsById(id)) {
             throw new RuntimeException("Product not found with id: " + id);
@@ -40,7 +40,7 @@ public class ProductService {
         product.setId(id);
         return productRepository.save(product);
     }
-    
+
     public void deleteProduct(Long id) {
         if (!productRepository.existsById(id)) {
             throw new RuntimeException("Product not found with id: " + id);
@@ -58,23 +58,24 @@ public class ProductService {
     /**
      * TODO #6 (리펙토링 – Pricing/RefData): 대량 가격 변경 로직을 도메인 친화적으로 리팩토링하세요.
      */
-    public void applyBulkPriceChangeBad(List<Long> productIds, double percentage, boolean includeTax) {
+    public void applyBulkPriceChangeBad(List<Long> productIds, BigDecimal percentage, boolean includeTax) {
         if (productIds == null || productIds.isEmpty()) {
             throw new IllegalArgumentException("empty productIds");
         }
-        // 잘못된 구현 예시: double 사용, 루프 내 개별 조회/저장, 하드코딩 세금/반올림 규칙
+
         for (Long id : productIds) {
             Product p = productRepository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Product not found: " + id));
 
             BigDecimal base = p.getPrice() == null ? BigDecimal.ZERO : p.getPrice();
-            BigDecimal changed = base.add(base.multiply(BigDecimal.valueOf(percentage).divide(BigDecimal.valueOf(100.0)))); // 부동소수점 오류 가능
+            BigDecimal rate = percentage.movePointLeft(2);
+            BigDecimal changed = base.multiply(BigDecimal.ONE.add(rate));
+
             if (includeTax) {
                 changed = changed.multiply(VAT); // 하드코딩 VAT 10%, 지역/카테고리별 규칙 미반영
             }
-            // 임의 반올림: 일관되지 않은 스케일/반올림 모드
-            BigDecimal newPrice = changed.setScale(2, RoundingMode.HALF_UP);
-            p.setPrice(newPrice);
+
+            p.changePrice(changed);
         }
     }
 }

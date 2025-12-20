@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 
 @Component
-public class ShippingPolicyImpl implements ShippingPolicy {
+public class FixedShippingPolicy implements ShippingPolicy {
 
     private static final BigDecimal FREE_THRESHOLD = new BigDecimal("100.00");
     private static final BigDecimal DEFAULT_FEE = new BigDecimal("5.00");

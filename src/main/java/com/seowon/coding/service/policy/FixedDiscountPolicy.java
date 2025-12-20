@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 
 @Component
-public class DiscountPolicyImpl implements DiscountPolicy {
+public class FixedDiscountPolicy implements DiscountPolicy {
 
     private static final BigDecimal SALE_DISCOUNT = new BigDecimal("10.00");
 
