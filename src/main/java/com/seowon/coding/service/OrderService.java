@@ -1,20 +1,13 @@
 package com.seowon.coding.service;
 
-import com.seowon.coding.domain.model.Order;
-import com.seowon.coding.domain.model.OrderItem;
-import com.seowon.coding.domain.model.ProcessingStatus;
-import com.seowon.coding.domain.model.Product;
+import com.seowon.coding.domain.model.*;
 import com.seowon.coding.domain.repository.OrderRepository;
 import com.seowon.coding.domain.repository.ProcessingStatusRepository;
 import com.seowon.coding.domain.repository.ProductRepository;
-import com.seowon.coding.domain.model.DiscountPolicy;
-import com.seowon.coding.domain.model.ShippingPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +24,7 @@ public class OrderService {
     private final ProcessingStatusRepository processingStatusRepository;
     private final ShippingPolicy shippingPolicy;
     private final DiscountPolicy discountPolicy;
+    private final ProcessService processService;
 
     @Transactional(readOnly = true)
     public List<Order> getAllOrders() {
@@ -161,10 +155,8 @@ public class OrderService {
      */
     @Transactional
     public void bulkShipOrdersParent(String jobId, List<Long> orderIds) {
-        ProcessingStatus ps = processingStatusRepository.findByJobId(jobId)
-                .orElseGet(() -> processingStatusRepository.save(ProcessingStatus.builder().jobId(jobId).build()));
-        ps.markRunning(orderIds == null ? 0 : orderIds.size());
-        processingStatusRepository.save(ps);
+        int total = (orderIds == null ? 0 : orderIds.size());
+        processService.startJobRequiresNew(jobId, total);
 
         int processed = 0;
         for (Long orderId : (orderIds == null ? List.<Long>of() : orderIds)) {
@@ -172,22 +164,15 @@ public class OrderService {
                 // 오래 걸리는 작업 이라는 가정 시뮬레이션 (예: 외부 시스템 연동, 대용량 계산 등)
                 orderRepository.findById(orderId).ifPresent(o -> o.setStatus(Order.OrderStatus.PROCESSING));
                 // 중간 진행률 저장
-                this.updateProgressRequiresNew(jobId, ++processed, orderIds.size());
+                processService.updateProgressRequiresNew(jobId, ++processed, total);
             } catch (Exception e) {
                 // REVIEW: 예외를 적절히 전파/로깅하고 중단/계속 정책을 정의해야 합니다
+                processService.markFailedRequiresNew(jobId);
+                throw new RuntimeException(e); // 추후 커스텀 예외로 변경
             }
         }
-        ps = processingStatusRepository.findByJobId(jobId).orElse(ps);
-        ps.markCompleted();
-        processingStatusRepository.save(ps);
-    }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void updateProgressRequiresNew(String jobId, int processed, int total) {
-        ProcessingStatus ps = processingStatusRepository.findByJobId(jobId)
-                .orElseGet(() -> ProcessingStatus.builder().jobId(jobId).build());
-        ps.updateProgress(processed, total);
-        processingStatusRepository.save(ps);
+        processService.markCompletedRequiresNew(jobId);
     }
 
 }
